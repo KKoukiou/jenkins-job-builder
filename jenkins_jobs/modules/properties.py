@@ -896,6 +896,192 @@ def lockable_resources(registry, xml_parent, data):
         lockable_resources, 'labelName').text = data.get('label', '')
 
 
+def job_restrictions_upstreamCauseRestriction_generic(restrict_xml,
+    jjb_description, restr_type):   
+    cnt = 0
+    for key, value in jjb_description.items():
+        if restr_type == 2 and cnt == 0:
+            cnt += 1
+        elif restr_type == 2 and cnt == 1:
+            restr_type += 1
+        if key == 'user':
+            job_restrictions_upstreamCauseRestriction_User(restrict_xml,
+                value, restr_type)
+        elif key == 'group':
+            job_restrictions_upstreamCauseRestriction_Group(restrict_xml,
+                value, restr_type)
+        elif key == 'regex':
+            job_restrictions_upstreamCauseRestriction_Regex(restrict_xml,
+                value, restr_type)
+        elif key == 'and':
+            job_restrictions_upstreamCauseRestriction_And(restrict_xml,
+                value, restr_type)
+        elif key == 'or':
+            job_restrictions_upstreamCauseRestriction_Or(restrict_xml,
+                value, restr_type)
+        elif key == 'mult-and':
+            job_restrictions_upstreamCauseRestriction_Mult_And(restrict_xml,
+                value, restr_type)
+        elif key == 'mult-or':
+            job_restrictions_upstreamCauseRestriction_Mult_Or(restrict_xml,
+                value, restr_type)
+        elif key == 'take-any':
+            job_restrictions_upstreamCauseRestriction_None(restrict_xml,
+                value, restr_type)
+        elif key == 'not':
+            job_restrictions_upstreamCauseRestriction_Not(restrict_xml,
+                value, restr_type)
+        else:
+            raise InvalidAttributeError(key, value)
+
+
+def job_restrictions_build_restriction(restrict_xml, restr_type, cause):
+    if restr_type == 2:
+        restrict_xml = XML.SubElement(
+            restrict_xml,
+            'first'
+        )
+    elif restr_type == 3:
+        restrict_xml = XML.SubElement(
+            restrict_xml,
+            'second'
+        )
+    elif restr_type == 4:
+        restrict_xml = XML.SubElement(
+            restrict_xml,
+            'restriction'
+        )
+    if restr_type != 1:
+        restrict_xml.set(
+            'class',
+            'com.synopsys.arc.jenkinsci.plugins.jobrestrictions.'
+            'restrictions.' + cause
+        )
+    else: 
+        restrict_xml = XML.SubElement(
+            restrict_xml,
+            'com.synopsys.arc.jenkinsci.plugins.jobrestrictions.'
+            'restrictions.' + cause
+        )
+    return restrict_xml
+
+
+def job_restrictions_upstreamCauseRestriction_User(job_restriction,
+    user_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'job.StartedByUserRestriction')
+    XML.SubElement(
+        job_restriction, 'checkUpstreamProjects'
+    ).text =  str(user_restrict.get('accept-automatic-runs', False)).lower()
+    user_list = user_restrict.get('user-list', [])    
+    if user_list:
+        users = XML.SubElement(
+            job_restriction, 'usersList'
+        )
+        for user in user_list:
+            user_selector = XML.SubElement(
+                users,
+                'com.synopsys.arc.jenkinsci.plugins.jobrestrictions.'
+                'util.UserSelector'
+            )
+            XML.SubElement(
+                user_selector, 'selectedUserId'
+            ).text = str(user)
+
+        XML.SubElement(
+            job_restriction, 'acceptAutomaticRuns'
+        ).text = str(user_restrict.get('accept-automatic-runs', False)).lower()
+        XML.SubElement(
+            job_restriction, 'acceptAnonymousUsers'
+        ).text = str(user_restrict.get('accept-anonymous-users', False)).lower()
+
+
+def job_restrictions_upstreamCauseRestriction_Group(job_restriction,
+    group_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'job.StartedByMemberOfGroupRestriction')
+    XML.SubElement(
+        job_restriction, 'checkUpstreamProjects'
+    ).text = str(group_restrict.get('accept-upstream', False)).lower()
+    group_list = group_restrict.get('group-list', [])    
+    if group_list:
+        groups = XML.SubElement(
+            job_restriction, 'groupList'
+        )
+        for group in group_list:
+            group_selector = XML.SubElement(
+                groups,
+                'com.synopsys.arc.jenkinsci.plugins.jobrestrictions.'
+                'util.GroupSelector'
+            )
+            XML.SubElement(
+                group_selector, 'selectedGroupId'
+            ).text = str(group)
+
+
+def job_restrictions_upstreamCauseRestriction_Regex(job_restriction,
+    regex_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'job.RegexNameRestriction')
+    XML.SubElement(
+        job_restriction, 'regexExpression'
+    ).text = str(regex_restrict.get('pattern', ''))
+    XML.SubElement(
+        job_restriction, 'checkShortName'
+    ).text = str(regex_restrict.get(
+        'check-short-name', False)).lower()
+
+
+def job_restrictions_upstreamCauseRestriction_Mult_And(job_restriction,
+    mult_and_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'logic.MultipleAndJobRestriction')
+    jr = XML.SubElement(
+        job_restriction, 'restrictions'
+    )
+    job_restrictions_upstreamCauseRestriction_generic(jr, mult_and_restrict, 1)
+    
+
+def job_restrictions_upstreamCauseRestriction_Mult_Or(job_restriction,
+    mult_or_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'logic.MultipleOrJobRestriction')
+    jr = XML.SubElement(
+        job_restriction, 'restrictions'
+    )
+    job_restrictions_upstreamCauseRestriction_generic(jr, mult_or_restrict, 1)
+
+
+def job_restrictions_upstreamCauseRestriction_And(job_restriction,
+    and_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'logic.AndJobRestriction')
+    job_restrictions_upstreamCauseRestriction_generic(job_restriction,
+    and_restrict, 2)
+    
+
+def job_restrictions_upstreamCauseRestriction_Or(job_restriction,
+    or_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'logic.OrJobRestriction')
+    job_restrictions_upstreamCauseRestriction_generic(job_restriction,
+    or_restrict, 2)
+
+
+def job_restrictions_upstreamCauseRestriction_None(job_restriction,
+    or_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'logic.AnyJobRestriction')
+
+
+def job_restrictions_upstreamCauseRestriction_Not(job_restriction,
+    or_restrict, restr_type):
+    job_restriction = job_restrictions_build_restriction(job_restriction,
+        restr_type, 'logic.NotJobRestriction')
+    job_restrictions_upstreamCauseRestriction_generic(job_restriction,
+    or_restrict, 4)
+
+
 def job_restrictions(registry, xml_parent, data):
     """yaml: job-restrictions
     Requires the Jenkins :jenkins-wiki:`Job Restrictions Plugin
@@ -916,14 +1102,31 @@ def job_restrictions(registry, xml_parent, data):
         'JobRestrictionProperty',
     )
     restriction_config = XML.SubElement(job_restrictions, 'config')
-    user_id_cause = XML.SubElement(
-        restriction_config, 'userIdCauseRestriction'
-    )
-    XML.SubElement(
-        user_id_cause, 'prohibitManualLaunch'
-    ).text = str(data.get('prohibit-manual-launch', False)).lower()
-    # TODO: plugin implements more options, and combinations.
 
+    if data.get('prohibit-manual-launch', False):
+        user_id_cause = XML.SubElement(
+            restriction_config, 'userIdCauseRestriction'
+        )
+        XML.SubElement(
+            user_id_cause, 'prohibitManualLaunch'
+        ).text = str(data.get('prohibit-manual-launch', False)).lower()
+
+    upstream_restrict = data.get('restrict-from-upstream', {})
+    if upstream_restrict:
+        upstream_cause = XML.SubElement(
+            restriction_config, 'upstreamCauseRestriction'
+        )
+        job_restriction = XML.SubElement(
+            upstream_cause, 'jobRestriction'
+        )
+        XML.SubElement(
+            upstream_cause, 'skipCheckForMissingInfo'
+        ).text = str(upstream_restrict.get(
+            'skip-check-for-missing-info', False)).lower()
+        if 'skip-check-for-missing-info' in upstream_restrict:
+            del upstream_restrict['skip-check-for-missing-info']
+        job_restrictions_upstreamCauseRestriction_generic(job_restriction,
+            upstream_restrict, 0)
 
 class Properties(jenkins_jobs.modules.base.Base):
     sequence = 20
